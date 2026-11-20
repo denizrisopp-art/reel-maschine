@@ -1,0 +1,269 @@
+{
+ "tool": "Meta AI",
+ "toolUrl": "https://www.meta.ai",
+ "promptText": "Erstelle einen Tagesablauf für einen Tag in Berlin mit drei Sehenswürdigkeiten, einem Café und Tipps fürs Abendessen.",
+ "szenen": [
+  {
+   "titel": "Deinen Städtetrip plant jetzt die KI",
+   "text": "Deine Wochenendplanung schreibst du ab jetzt nicht mehr selbst.",
+   "start": 0,
+   "ende": 4.54
+  },
+  {
+   "titel": "Meta AI im Chat öffnen",
+   "text": "Öffne dafür Meta AI direkt im Chat und gib deinen Standort und deine Wünsche ein.",
+   "start": 4.33,
+   "ende": 10.73
+  },
+  {
+   "titel": "Dein Prompt für den Ausflug",
+   "text": "Den Prompt siehst du hier.",
+   "start": 10.53,
+   "ende": 12.95
+  },
+  {
+   "titel": "Schick das deiner Reisebegleitung",
+   "text": "Du bekommst passende Orte und einen fertigen Tagesablauf. Schick das Reel an die Person, mit der du verreist.",
+   "start": 12.75,
+   "ende": 20.74
+  }
+ ],
+ "woerter": [
+  {
+   "text": "Deine",
+   "start": 0.2,
+   "end": 0.55
+  },
+  {
+   "text": "Wochenendplanung",
+   "start": 0.61,
+   "end": 1.35
+  },
+  {
+   "text": "schreibst",
+   "start": 1.42,
+   "end": 1.91
+  },
+  {
+   "text": "du",
+   "start": 1.97,
+   "end": 2.22
+  },
+  {
+   "text": "ab",
+   "start": 2.28,
+   "end": 2.53
+  },
+  {
+   "text": "jetzt",
+   "start": 2.59,
+   "end": 2.95
+  },
+  {
+   "text": "nicht",
+   "start": 3.01,
+   "end": 3.36
+  },
+  {
+   "text": "mehr",
+   "start": 3.42,
+   "end": 3.74
+  },
+  {
+   "text": "selbst.",
+   "start": 3.8,
+   "end": 4.23
+  },
+  {
+   "text": "Öffne",
+   "start": 4.54,
+   "end": 4.89
+  },
+  {
+   "text": "dafür",
+   "start": 4.95,
+   "end": 5.3
+  },
+  {
+   "text": "Meta",
+   "start": 5.37,
+   "end": 5.69
+  },
+  {
+   "text": "AI",
+   "start": 5.75,
+   "end": 6
+  },
+  {
+   "text": "direkt",
+   "start": 6.05,
+   "end": 6.44
+  },
+  {
+   "text": "im",
+   "start": 6.5,
+   "end": 6.75
+  },
+  {
+   "text": "Chat",
+   "start": 6.81,
+   "end": 7.13
+  },
+  {
+   "text": "und",
+   "start": 7.19,
+   "end": 7.48
+  },
+  {
+   "text": "gib",
+   "start": 7.54,
+   "end": 7.82
+  },
+  {
+   "text": "deinen",
+   "start": 7.88,
+   "end": 8.27
+  },
+  {
+   "text": "Standort",
+   "start": 8.33,
+   "end": 8.79
+  },
+  {
+   "text": "und",
+   "start": 8.85,
+   "end": 9.14
+  },
+  {
+   "text": "deine",
+   "start": 9.2,
+   "end": 9.55
+  },
+  {
+   "text": "Wünsche",
+   "start": 9.61,
+   "end": 10.04
+  },
+  {
+   "text": "ein.",
+   "start": 10.1,
+   "end": 10.42
+  },
+  {
+   "text": "Den",
+   "start": 10.73,
+   "end": 11.01
+  },
+  {
+   "text": "Prompt",
+   "start": 11.07,
+   "end": 11.46
+  },
+  {
+   "text": "siehst",
+   "start": 11.52,
+   "end": 11.91
+  },
+  {
+   "text": "du",
+   "start": 11.97,
+   "end": 12.22
+  },
+  {
+   "text": "hier.",
+   "start": 12.28,
+   "end": 12.64
+  },
+  {
+   "text": "Du",
+   "start": 12.95,
+   "end": 13.2
+  },
+  {
+   "text": "bekommst",
+   "start": 13.26,
+   "end": 13.72
+  },
+  {
+   "text": "passende",
+   "start": 13.78,
+   "end": 14.24
+  },
+  {
+   "text": "Orte",
+   "start": 14.3,
+   "end": 14.62
+  },
+  {
+   "text": "und",
+   "start": 14.68,
+   "end": 14.96
+  },
+  {
+   "text": "einen",
+   "start": 15.02,
+   "end": 15.38
+  },
+  {
+   "text": "fertigen",
+   "start": 15.44,
+   "end": 15.9
+  },
+  {
+   "text": "Tagesablauf.",
+   "start": 15.96,
+   "end": 16.56
+  },
+  {
+   "text": "Schick",
+   "start": 16.62,
+   "end": 17.01
+  },
+  {
+   "text": "das",
+   "start": 17.07,
+   "end": 17.35
+  },
+  {
+   "text": "Reel",
+   "start": 17.41,
+   "end": 17.73
+  },
+  {
+   "text": "an",
+   "start": 17.79,
+   "end": 18.04
+  },
+  {
+   "text": "die",
+   "start": 18.1,
+   "end": 18.39
+  },
+  {
+   "text": "Person,",
+   "start": 18.45,
+   "end": 18.87
+  },
+  {
+   "text": "mit",
+   "start": 18.93,
+   "end": 19.22
+  },
+  {
+   "text": "der",
+   "start": 19.28,
+   "end": 19.56
+  },
+  {
+   "text": "du",
+   "start": 19.62,
+   "end": 19.87
+  },
+  {
+   "text": "verreist.",
+   "start": 19.93,
+   "end": 20.43
+  }
+ ],
+ "dauer": 21.14
+}
