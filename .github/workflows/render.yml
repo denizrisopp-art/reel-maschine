@@ -28,6 +28,15 @@ jobs:
           DATEN: ${{ inputs.daten }}
           ELEVENLABS_API_KEY: ${{ secrets.ELEVENLABS_API_KEY }}
         run: node scripts/render.mjs
+      - name: Video ins Projekt legen (für den Abruf über jsDelivr)
+        run: |
+          git config user.name "reel-maschine"
+          git config user.email "reel-maschine@users.noreply.github.com"
+          mkdir -p videos
+          cp out/reel.mp4 "videos/${{ inputs.tag }}.mp4"
+          git add "videos/${{ inputs.tag }}.mp4"
+          git commit -m "Reel ${{ inputs.tag }}"
+          git push
       - name: Video veröffentlichen
         env:
           GH_TOKEN: ${{ github.token }}
