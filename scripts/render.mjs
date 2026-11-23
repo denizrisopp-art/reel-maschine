@@ -15,7 +15,7 @@ const volltext = teile.join(' ');
 const tts = await (await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${daten.voiceId}/with-timestamps?output_format=mp3_44100_128`, {
   method: 'POST', headers: { 'xi-api-key': key, 'content-type': 'application/json' },
   body: JSON.stringify({ text: volltext, model_id: 'eleven_multilingual_v2', language_code: 'de',
-    voice_settings: { stability: 0.45, similarity_boost: 0.8, style: 0.15, use_speaker_boost: true } }),
+    voice_settings: { stability: 0.45, similarity_boost: 0.8, style: 0.15, use_speaker_boost: true, speed: 1.1 } }), // zügig (ElevenLabs erlaubt 0,7 bis 1,2)
 })).json();
 if (!tts.audio_base64) throw new Error('ElevenLabs: ' + JSON.stringify(tts).slice(0, 300));
 fs.writeFileSync(path.join(pub, 'stimme.mp3'), Buffer.from(tts.audio_base64, 'base64'));
@@ -46,7 +46,9 @@ if (daten.screenshotUrl) {
   } catch (e) { console.log('Screenshot nicht geladen:', e.message); }
 }
 
-const props = { tool: daten.tool, toolUrl: daten.toolUrl, promptText: daten.promptText || '', screenshot, audio: 'stimme.mp3', szenen, woerter, dauer };
+// Schritte im Wortlaut der Website (optional, kommt später aus n8n)
+const schritte = Array.isArray(daten.schritte) ? daten.schritte.map(s => String(s).trim()).filter(Boolean).slice(0, 5) : undefined;
+const props = { tool: daten.tool, toolUrl: daten.toolUrl, promptText: daten.promptText || '', schritte, screenshot, audio: 'stimme.mp3', szenen, woerter, dauer };
 fs.writeFileSync('props.json', JSON.stringify(props, null, 1));
 
 // 3) Rendern
