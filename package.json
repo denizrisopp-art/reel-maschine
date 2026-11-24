@@ -3,8 +3,12 @@
   "version": "1.0.0",
   "description": "",
   "scripts": {
+    "prepare-fonts": "node scripts/prepare-fonts.mjs",
+    "dev": "node scripts/prepare-fonts.mjs && remotion studio src/index.ts --port 3000 --no-open",
+    "start": "node scripts/prepare-fonts.mjs && remotion studio src/index.ts --port 3000 --no-open",
+    "build": "node scripts/prepare-fonts.mjs && remotion bundle src/index.ts --out-dir build",
     "render": "node scripts/render.mjs",
-    "studio": "remotion studio src/index.ts"
+    "studio": "node scripts/prepare-fonts.mjs && remotion studio src/index.ts --port 3000 --no-open"
   },
   "keywords": [],
   "author": "",
