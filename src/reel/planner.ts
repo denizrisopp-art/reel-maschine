@@ -432,12 +432,14 @@ export const kameraPx = (
   const z = k.z + (k.dz ?? 0) * dp;
   const fyMax = Math.min(H, Hv * 2.2);
   if (k.fest) {
-    // v45: ausgerichteter Ausschnitt, nur senkrechtes Scrollen
+    // v45: ausgerichteter Ausschnitt; scrollt senkrecht, ein leichter Zoom (nur Totale) bleibt mittig
     const v = k.fest.v0 + (((k.dy ?? 0) * fyMax) / Math.max(1, H)) * dp;
+    const uc = k.fest.u0 + Wv / (2 * W * k.z);
+    const vc = v + Hv / (2 * H * k.z);
     return {
       z,
-      tx: klemme(-k.fest.u0 * W * z, Math.min(0, Wv - W * z), 0),
-      ty: klemme(-v * H * z, Math.min(0, Hv - H * z), 0),
+      tx: klemme(Wv / 2 - uc * W * z, Math.min(0, Wv - W * z), 0),
+      ty: klemme(Hv / 2 - vc * H * z, Math.min(0, Hv - H * z), 0),
     };
   }
   const ky = klemme(k.y + (k.dy ?? 0) * dp, 0, 1);
@@ -538,7 +540,9 @@ export const ausrichten = (
   tinte?: Tinte,
   meiden?: Ausschnitt,
 ): Kamera => {
-  if (kam.z <= 1.01 || W <= 0 || H <= 0) return kam;
+  if (W <= 0 || H <= 0) return kam;
+  const totale = kam.z <= 1.01;
+  if (totale && !tinte) return kam;
   const fyMax = Math.min(H, Hv * 2.2);
   const dyPlan = kam.cursor ? 0 : kam.dy ?? 0;
   const geometrie = (z: number, dy: number) => {
@@ -553,7 +557,7 @@ export const ausrichten = (
     const pv = klemme(-klemme(Hv / 2 - ky * fyMax * z, Math.min(0, Hv - H * z), 0) / (H * z), vMin, vMax);
     return { cw, ch, dv, uMax, vMin, vMax, pu, pv };
   };
-  const basis = (z: number, dy: number): Kamera => ({ ...kam, z, dz: 0, dy });
+  const basis = (z: number, dy: number): Kamera => ({ ...kam, z, dz: totale ? kam.dz : 0, dy });
 
   if (!tinte) {
     const z = Math.min(kam.z, schmal ? 1.25 : 1.35);
@@ -587,11 +591,37 @@ export const ausrichten = (
     return (n >= 3 ? 0.6 : 0) + (4 * n) / (x1 - x0);
   };
 
-  const zPlan = Math.min(kam.z, schmal ? 1.25 : 1.9);
-  const zMin = 1.0;
+  // Zeile y (Zelle) hat zwischen x0 und x1 Schrift?
+  const zeileTinte = (y: number, x0: number, x1: number) =>
+    PH[y * (gw + 1) + x1] - PH[y * (gw + 1) + x0] > 0;
+  // Anteil leerer Zeilen im Ausschnitt (viel leere Fläche wirkt wie ein Zufallsausschnitt)
+  const leerAnteil = (u0: number, v0: number, u1: number, v1: number) => {
+    const x0 = zx(u0), x1 = Math.max(x0 + 1, zx(u1)), y0 = zy(v0), y1 = Math.max(y0 + 1, zy(v1));
+    let leer = 0;
+    for (let y = y0; y < Math.min(gh, y1); y++) if (!zeileTinte(y, x0, x1)) leer++;
+    return leer / (y1 - y0);
+  };
+  // Waagerechte Kante in einer schmalen Lücke (zwischen zwei Zeilen desselben Absatzes)?
+  const engeLuecke = (v: number, u0: number, u1: number, pxJeZelle: number) => {
+    if (v <= 0.003 || v >= 0.997) return 0;
+    const x0 = zx(u0), x1 = Math.max(x0 + 1, zx(u1));
+    const y = klemme(Math.round(v * gh), 0, gh - 1);
+    if (zeileTinte(y, x0, x1)) return 0; // schon als Schnitt gezählt
+    const grenze = Math.ceil(56 / pxJeZelle);
+    let oben = 0;
+    while (oben < grenze && y - oben - 1 >= 0 && !zeileTinte(y - oben - 1, x0, x1)) oben++;
+    if (y - oben - 1 < 0) return 0;
+    let unten = 0;
+    while (unten < grenze && y + unten + 1 < gh && !zeileTinte(y + unten + 1, x0, x1)) unten++;
+    if (y + unten + 1 >= gh) return 0;
+    const lueckePx = (oben + unten + 1) * pxJeZelle;
+    return lueckePx < 56 ? 1 - lueckePx / 56 : 0;
+  };
+
+  const zPlan = totale ? 1 : Math.min(kam.z, schmal ? 1.25 : 1.9);
   const zMax = schmal ? 1.25 : 1.9;
   const zStufen = [zPlan];
-  for (let z = zMin; z <= zMax + 1e-6; z += 0.025) zStufen.push(+z.toFixed(3));
+  if (!totale) for (let z = 1.0; z <= zMax + 1e-6; z += 0.025) zStufen.push(+z.toFixed(3));
   // Scrollen nach unten wie geplant, nach oben oder (mit kleinem Abzug) stillstehen
   const scrolls = dyPlan ? [dyPlan, -dyPlan, 0] : [0];
 
@@ -612,6 +642,13 @@ export const ausrichten = (
           const vb = Math.max(v, v + g.dv) + g.ch;
           const inh = innen(u, v, u + g.cw, v + g.ch);
           const leer = Math.max(0, 1 - inh / 0.035);
+          const pxJeZelle = (H * z) / gh;
+          // leere Fläche im Ruhebild und am Ende der Scrollbewegung
+          const leerFlaeche =
+            Math.max(0, leerAnteil(u, v, u + g.cw, v + g.ch) - 0.45) +
+            (g.dv ? Math.max(0, leerAnteil(u, v + g.dv, u + g.cw, v + g.dv + g.ch) - 0.45) : 0);
+          const luecke =
+            engeLuecke(v, u, u + g.cw, pxJeZelle) + engeLuecke(v + g.ch, u, u + g.cw, pxJeZelle);
           const gleich = meiden
             ? Math.max(0, ueberlappung({ u, v, cw: g.cw, ch: g.ch }, meiden) - 0.6) / 0.4
             : 0;
@@ -623,9 +660,11 @@ export const ausrichten = (
             // auch das Ende der Scrollbewegung soll sauber landen
             (g.dv ? 0.7 * (schnittV(v + g.dv, u, u + g.cw) + schnittV(v + g.dv + g.ch, u, u + g.cw)) : 0) +
             2 * leer +
+            2.5 * leerFlaeche +
+            0.8 * luecke +
             2 * gleich +
             halt +
-            (!schmal && z < 1.12 ? 0.5 : 0) +
+            (!schmal && !totale && z < 1.12 ? 0.5 : 0) +
             0.3 * (g.uMax ? Math.abs(u - g.pu) / g.uMax : 0) +
             0.3 * Math.min(1.5, Math.abs(v - g.pv) / g.ch) +
             0.8 * Math.abs(z - zPlan);
