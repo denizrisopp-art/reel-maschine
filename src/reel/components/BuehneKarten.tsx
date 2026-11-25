@@ -1,8 +1,8 @@
 import React from 'react';
 import { Img, spring, useCurrentFrame, useVideoConfig } from 'remotion';
 import { monoFontFamily } from '../../fonts';
-import { cleanDomain, kameraPx, klemme, lerp } from '../planner';
-import { BAR, BUEHNE, C, Kamera } from '../types';
+import { cleanDomain, kameraPx, klemme, lerp, shotGeometrie } from '../planner';
+import { BAR, BildMasse, BUEHNE, C, Kamera } from '../types';
 import { Gefaerbt, Nummer } from './ObenText';
 
 /** Authentic macOS-inspired crisp vector pointer with subtle drop shadow */
@@ -121,7 +121,7 @@ const Adressleiste: React.FC<{ url: string }> = ({ url }) => (
 
 type BrowserRahmenProps = {
   shot: string;
-  masse: { b: number; h: number };
+  masse: BildMasse;
   toolUrl: string;
   kam: Kamera;
   vorKam?: Kamera;
@@ -141,13 +141,12 @@ export const BrowserRahmen: React.FC<BrowserRahmenProps> = ({
   seit,
 }) => {
   const { fps } = useVideoConfig();
-  const Wv = BUEHNE.b - 2;
-  const ar = masse.h / masse.b;
-  const W = Wv;
-  const H = W * ar;
-  const hv = Math.min(BUEHNE.h - BAR - 2, H);
-  const ziel = kameraPx(kam, W, H, Wv, hv, driftProgress);
-  const alt = vorKam && fahrt < 1 ? kameraPx(vorKam, W, H, Wv, hv, 1) : ziel;
+  // v45: kam/vorKam sind schon ausgerichtet (richteTakteAus in Reel.tsx)
+  const { W, H, Wv, hv } = shotGeometrie(masse);
+  const k = kam;
+  const vk = vorKam;
+  const ziel = kameraPx(k, W, H, Wv, hv, driftProgress);
+  const alt = vk && fahrt < 1 ? kameraPx(vk, W, H, Wv, hv, 1) : ziel;
   const c = {
     z: lerp(alt.z, ziel.z, fahrt),
     tx: lerp(alt.tx, ziel.tx, fahrt),
@@ -155,20 +154,20 @@ export const BrowserRahmen: React.FC<BrowserRahmenProps> = ({
   };
 
   // Optional smooth editorial pointer glide & tactile click on zoomed focus beats
-  const cursorGlide = kam.cursor
+  const cursorGlide = k.cursor
     ? spring({ frame: Math.max(0, seit - Math.round(0.22 * fps)), fps, config: { damping: 24, stiffness: 120, mass: 0.9 } })
     : 0;
   const clickStart = Math.round(0.65 * fps);
-  const clickProgress = kam.cursor?.klick
+  const clickProgress = k.cursor?.klick
     ? klemme((seit - clickStart) / Math.round(0.35 * fps), 0, 1)
     : 0;
   const press =
-    kam.cursor?.klick && seit >= clickStart && seit < clickStart + Math.round(0.16 * fps)
+    k.cursor?.klick && seit >= clickStart && seit < clickStart + Math.round(0.16 * fps)
       ? Math.sin(((seit - clickStart) / Math.round(0.16 * fps)) * Math.PI)
       : 0;
 
-  const cx = kam.cursor ? lerp(Wv * 0.84, Wv * kam.cursor.x, cursorGlide) : 0;
-  const cy = kam.cursor ? lerp(hv * 0.88, hv * kam.cursor.y, cursorGlide) : 0;
+  const cx = k.cursor ? lerp(Wv * 0.84, Wv * k.cursor.x, cursorGlide) : 0;
+  const cy = k.cursor ? lerp(hv * 0.88, hv * k.cursor.y, cursorGlide) : 0;
 
   return (
     <div
@@ -217,7 +216,7 @@ export const BrowserRahmen: React.FC<BrowserRahmenProps> = ({
             boxShadow: 'inset 0 0 36px rgba(0,0,0,0.12)',
           }}
         />
-        {kam.cursor && (
+        {k.cursor && (
           <>
             <KlickRing x={cx} y={cy} progress={clickProgress} />
             <Zeiger x={cx} y={cy} opacity={klemme(cursorGlide * 2.2, 0, 1)} press={press} />

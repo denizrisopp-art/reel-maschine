@@ -75,9 +75,9 @@ export const Untertitel: React.FC<{ gruppen: Gruppe[] }> = ({ gruppen }) => {
               style={{
                 display: 'inline-block',
                 color: farbe,
-                transform: istAktiv
-                  ? `translateY(${-2.5 * wortPop}px) scale(${1 + 0.045 * wortPop})`
-                  : 'none',
+                // Kein scale mehr: das vergrößerte aktive Wort schob sich über die Leerzeichen
+                // ("UrheberrechtsfreieMusik"), Reel 25.11.
+                transform: istAktiv ? `translateY(${-2.5 * wortPop}px)` : 'none',
               }}
             >
               {w.text}
