@@ -18,10 +18,12 @@ import {
   planeSfx,
   promptForm,
   reelDuration,
+  richteTakteAus,
   rollen,
+  tintenKarte,
   tippKurve,
 } from './reel/planner';
-import { BUEHNE, ReelProps, Szene, Wort } from './reel/types';
+import { BildMasse, BUEHNE, ReelProps, Szene, Tinte, Wort } from './reel/types';
 import { AudioSpur } from './reel/components/AudioSpur';
 import {
   BrowserRahmen,
@@ -40,14 +42,34 @@ export { reelDuration };
 
 const quelle = (s?: string) => (!s ? undefined : /^https?:/.test(s) ? s : staticFile(s));
 
+// v45: verkleinerte Kantenkarte des Screenshots, damit Zooms nicht durch Wörter schneiden
+const tinteVon = (img: HTMLImageElement): Tinte | undefined => {
+  try {
+    const gw = 320;
+    const gh = Math.max(1, Math.min(2400, Math.round((gw * img.naturalHeight) / img.naturalWidth)));
+    const cv = document.createElement('canvas');
+    cv.width = gw;
+    cv.height = gh;
+    const ctx = cv.getContext('2d', { willReadFrequently: true });
+    if (!ctx) return undefined;
+    ctx.imageSmoothingQuality = 'high';
+    ctx.drawImage(img, 0, 0, gw, gh);
+    return tintenKarte(ctx.getImageData(0, 0, gw, gh).data, gw, gh);
+  } catch {
+    return undefined;
+  }
+};
+
 const useBildMasse = (src?: string) => {
-  const [masse, setMasse] = useState<{ b: number; h: number } | null>(null);
+  const [masse, setMasse] = useState<BildMasse | null>(null);
   const [handle] = useState(() => (src ? delayRender('Screenshot-Größe') : null));
   useEffect(() => {
     if (!src || handle === null) return;
     const img = new Image();
     img.onload = () => {
-      if (img.naturalWidth > 0) setMasse({ b: img.naturalWidth, h: img.naturalHeight });
+      if (img.naturalWidth > 0) {
+        setMasse({ b: img.naturalWidth, h: img.naturalHeight, tinte: tinteVon(img) });
+      }
       continueRender(handle);
     };
     img.onerror = () => continueRender(handle);
@@ -62,9 +84,14 @@ export const Reel: React.FC<ReelProps> = (p) => {
   const shot = quelle(p.screenshot);
   const masse = useBildMasse(shot);
 
-  const { takte, szenenGrenzen } = useMemo(
+  const { takte: rohTakte, szenenGrenzen } = useMemo(
     () => plane(p, fps, durationInFrames, !!masse),
     [p, fps, durationInFrames, masse],
+  );
+  // v45: Zoom-Ausschnitte an Text- und Seitenkanten ausrichten statt mitten durch Wörter
+  const takte = useMemo(
+    () => (masse ? richteTakteAus(rohTakte, masse) : rohTakte),
+    [rohTakte, masse],
   );
   const gruppen = useMemo(() => gruppiere(p.woerter || [], p.tool), [p.woerter, p.tool]);
   const pf = useMemo(() => promptForm(p.promptText || ''), [p.promptText]);
