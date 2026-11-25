@@ -5,7 +5,11 @@ import {
   REEL_FPS,
   ReelProps,
   SfxCue,
+  BAR,
+  BildMasse,
+  BUEHNE,
   Takt,
+  Tinte,
   Wort,
 } from './types';
 
@@ -149,12 +153,14 @@ const TOTAL: Kamera = { z: 1, x: 0.5, y: 0, dz: 0.025, dy: 0.015 };
 const NAH: Kamera = { z: 1.001, x: 0.5, y: 0.5, dz: 0.012 };
 
 // Editorial camera choreography for website screenshots (guided hero -> focal crops + scroll drift)
+// v45: Ausschnitte zoomen nicht mehr während des Takts (dz 0), sie wandern nur senkrecht wie beim
+// Scrollen; Takte mit Klick stehen still, damit der Zeiger auf seinem Ziel bleibt.
 const SHOT_CHOREO: Kamera[] = [
-  { z: 1.0, x: 0.5, y: 0.02, dz: 0.035, dy: 0.04 },
-  { z: 1.38, x: 0.36, y: 0.24, dz: 0.04, dy: 0.03, cursor: { x: 0.38, y: 0.32, klick: true } },
-  { z: 1.24, x: 0.52, y: 0.44, dz: 0.035, dy: 0.06 },
-  { z: 1.42, x: 0.64, y: 0.30, dz: 0.035, dy: 0.02, cursor: { x: 0.62, y: 0.38, klick: true } },
-  { z: 1.28, x: 0.5, y: 0.68, dz: 0.03, dy: 0.04 },
+  { z: 1.0, x: 0.5, y: 0.02, dz: 0.02, dy: 0.04 },
+  { z: 1.38, x: 0.36, y: 0.24, dz: 0, dy: 0, cursor: { x: 0.38, y: 0.32, klick: true } },
+  { z: 1.24, x: 0.52, y: 0.44, dz: 0, dy: 0.06 },
+  { z: 1.42, x: 0.64, y: 0.30, dz: 0, dy: 0, cursor: { x: 0.62, y: 0.38, klick: true } },
+  { z: 1.28, x: 0.5, y: 0.68, dz: 0, dy: 0.04 },
 ];
 
 export const rollen = (p: ReelProps) => {
@@ -212,8 +218,8 @@ export const plane = (p: ReelProps, fps: number, gesamt: number, hatShot: boolea
     z: f.z ?? 1.38,
     x: klemme(f.x, 0.15, 0.85),
     y: klemme(f.y, 0.05, 0.85),
-    dz: 0.035,
-    dy: 0.02,
+    dz: 0,
+    dy: 0,
     cursor: { x: klemme(f.x, 0.18, 0.82), y: klemme(f.y, 0.18, 0.78), klick: true },
   }));
 
@@ -424,11 +430,274 @@ export const kameraPx = (
 ) => {
   const dp = klemme(driftProgress, 0, 1);
   const z = k.z + (k.dz ?? 0) * dp;
-  const ky = klemme(k.y + (k.dy ?? 0) * dp, 0, 1);
   const fyMax = Math.min(H, Hv * 2.2);
+  if (k.fest) {
+    // v45: ausgerichteter Ausschnitt, nur senkrechtes Scrollen
+    const v = k.fest.v0 + (((k.dy ?? 0) * fyMax) / Math.max(1, H)) * dp;
+    return {
+      z,
+      tx: klemme(-k.fest.u0 * W * z, Math.min(0, Wv - W * z), 0),
+      ty: klemme(-v * H * z, Math.min(0, Hv - H * z), 0),
+    };
+  }
+  const ky = klemme(k.y + (k.dy ?? 0) * dp, 0, 1);
   const tx = klemme(Wv / 2 - k.x * W * z, Math.min(0, Wv - W * z), 0);
   const ty = klemme(Hv / 2 - ky * fyMax * z, Math.min(0, Hv - H * z), 0);
   return { z, tx, ty };
+};
+
+// v45: Kantenkarte aus RGBA-Pixeln (verkleinerter Screenshot). 1 = hier ist Schrift oder eine Kante.
+export const tintenKarte = (rgba: ArrayLike<number>, gw: number, gh: number): Tinte => {
+  const L = new Float32Array(gw * gh);
+  for (let i = 0; i < gw * gh; i++) {
+    L[i] = 0.299 * rgba[i * 4] + 0.587 * rgba[i * 4 + 1] + 0.114 * rgba[i * 4 + 2];
+  }
+  const d = new Uint8Array(gw * gh);
+  for (let y = 0; y < gh; y++) {
+    for (let x = 0; x < gw; x++) {
+      const i = y * gw + x;
+      const gx = x + 1 < gw ? Math.abs(L[i + 1] - L[i]) : 0;
+      const gy = y + 1 < gh ? Math.abs(L[i + gw] - L[i]) : 0;
+      d[i] = gx + gy > 26 ? 1 : 0;
+    }
+  }
+  return { gw, gh, d };
+};
+
+// v45: Summentabellen der Kantenkarte (einmal je Screenshot), damit die Suche schnell bleibt
+type TintenTabellen = { I: Int32Array; PV: Int32Array; PH: Int32Array };
+const tabellenCache = new WeakMap<Tinte, TintenTabellen>();
+const tabellen = (t: Tinte): TintenTabellen => {
+  const vorhanden = tabellenCache.get(t);
+  if (vorhanden) return vorhanden;
+  const { gw, gh, d } = t;
+  const I = new Int32Array((gw + 1) * (gh + 1));
+  for (let y = 0; y < gh; y++) {
+    let zeile = 0;
+    for (let x = 0; x < gw; x++) {
+      zeile += d[y * gw + x];
+      I[(y + 1) * (gw + 1) + x + 1] = I[y * (gw + 1) + x + 1] + zeile;
+    }
+  }
+  // PV: je Spalte, wie viele Zeilen in einem 3 Zellen breiten Streifen Schrift haben (Präfix über y)
+  const PV = new Int32Array(gw * (gh + 1));
+  for (let x = 0; x < gw; x++) {
+    for (let y = 0; y < gh; y++) {
+      const i = y * gw + x;
+      const hat = d[i] | (x > 0 ? d[i - 1] : 0) | (x + 1 < gw ? d[i + 1] : 0);
+      PV[x * (gh + 1) + y + 1] = PV[x * (gh + 1) + y] + hat;
+    }
+  }
+  // PH: je Zeile, wie viele Spalten in einem 3 Zellen hohen Streifen Schrift haben (Präfix über x)
+  const PH = new Int32Array(gh * (gw + 1));
+  for (let y = 0; y < gh; y++) {
+    for (let x = 0; x < gw; x++) {
+      const i = y * gw + x;
+      const hat = d[i] | (y > 0 ? d[i - gw] : 0) | (y + 1 < gh ? d[i + gw] : 0);
+      PH[y * (gw + 1) + x + 1] = PH[y * (gw + 1) + x] + hat;
+    }
+  }
+  const neu = { I, PV, PH };
+  tabellenCache.set(t, neu);
+  return neu;
+};
+
+// Geometrie des Browserfensters auf der Bühne (gleich wie in BrowserRahmen)
+export const shotGeometrie = (masse: BildMasse) => {
+  const Wv = BUEHNE.b - 2;
+  const W = Wv;
+  const H = (W * masse.h) / Math.max(1, masse.b);
+  const hv = Math.min(BUEHNE.h - BAR - 2, H);
+  return { W, H, Wv, hv, schmal: masse.b < 1000 || masse.h > masse.b };
+};
+
+type Ausschnitt = { u: number; v: number; cw: number; ch: number };
+
+const ueberlappung = (a: Ausschnitt, b: Ausschnitt) => {
+  const iw = Math.max(0, Math.min(a.u + a.cw, b.u + b.cw) - Math.max(a.u, b.u));
+  const ih = Math.max(0, Math.min(a.v + a.ch, b.v + b.ch) - Math.max(a.v, b.v));
+  const i = iw * ih;
+  return i / (a.cw * a.ch + b.cw * b.ch - i || 1);
+};
+
+/**
+ * v45: Zoom-Ausschnitt so legen, dass seine Ränder nicht durch Wörter schneiden.
+ * Mit Kantenkarte: Suche über Zoomstufe, Lage und Scrollrichtung nach Rändern im Leerraum
+ * (Seitenrand, Abstand zwischen Spalten, Karten oder Zeilen), nicht auf leerer Fläche, nahe am Plan
+ * und anders als der vorige Ausschnitt; der Zeiger landet auf echtem Inhalt.
+ * Ohne Karte: an die nähere Seitenkante legen, Zoom begrenzt.
+ * Hochformat/schmal (Mobilansicht, ohnehin groß im Bild): höchstens 1,25-fach.
+ */
+export const ausrichten = (
+  kam: Kamera,
+  W: number,
+  H: number,
+  Wv: number,
+  Hv: number,
+  schmal: boolean,
+  tinte?: Tinte,
+  meiden?: Ausschnitt,
+): Kamera => {
+  if (kam.z <= 1.01 || W <= 0 || H <= 0) return kam;
+  const fyMax = Math.min(H, Hv * 2.2);
+  const dyPlan = kam.cursor ? 0 : kam.dy ?? 0;
+  const geometrie = (z: number, dy: number) => {
+    const cw = Math.min(1, Wv / (W * z));
+    const ch = Math.min(1, Hv / (H * z));
+    const dv = (dy * fyMax) / H;
+    const uMax = Math.max(0, 1 - cw);
+    const vMin = Math.max(0, -dv);
+    const vMax = Math.max(vMin, 1 - ch - Math.max(0, dv));
+    const pu = klemme(-klemme(Wv / 2 - kam.x * W * z, Math.min(0, Wv - W * z), 0) / (W * z), 0, uMax);
+    const ky = klemme(kam.y, 0, 1);
+    const pv = klemme(-klemme(Hv / 2 - ky * fyMax * z, Math.min(0, Hv - H * z), 0) / (H * z), vMin, vMax);
+    return { cw, ch, dv, uMax, vMin, vMax, pu, pv };
+  };
+  const basis = (z: number, dy: number): Kamera => ({ ...kam, z, dz: 0, dy });
+
+  if (!tinte) {
+    const z = Math.min(kam.z, schmal ? 1.25 : 1.35);
+    const g = geometrie(z, dyPlan);
+    return { ...basis(z, dyPlan), fest: { u0: g.pu < g.uMax / 2 ? 0 : g.uMax, v0: g.pv } };
+  }
+
+  const { gw, gh } = tinte;
+  const { I, PV, PH } = tabellen(tinte);
+  const zx = (u: number) => klemme(Math.round(u * gw), 0, gw);
+  const zy = (v: number) => klemme(Math.round(v * gh), 0, gh);
+  const summe = (x0: number, y0: number, x1: number, y1: number) =>
+    I[y1 * (gw + 1) + x1] - I[y0 * (gw + 1) + x1] - I[y1 * (gw + 1) + x0] + I[y0 * (gw + 1) + x0];
+  const innen = (u0: number, v0: number, u1: number, v1: number) => {
+    const x0 = zx(u0), x1 = Math.max(x0 + 1, zx(u1)), y0 = zy(v0), y1 = Math.max(y0 + 1, zy(v1));
+    return summe(x0, y0, Math.min(gw, x1), Math.min(gh, y1)) / ((x1 - x0) * (y1 - y0));
+  };
+  // Schnittkante trifft Schrift: jeder Schnitt kostet, mehr geschnittene Zeilen kosten mehr
+  const schnittU = (u: number, v0: number, v1: number) => {
+    if (u <= 0.003 || u >= 0.997) return 0;
+    const x = klemme(Math.round(u * gw), 0, gw - 1);
+    const y0 = zy(v0), y1 = Math.max(y0 + 1, zy(v1));
+    const n = PV[x * (gh + 1) + Math.min(gh, y1)] - PV[x * (gh + 1) + y0];
+    return (n >= 2 ? 1 : 0) + (8 * n) / (y1 - y0);
+  };
+  const schnittV = (v: number, u0: number, u1: number) => {
+    if (v <= 0.003 || v >= 0.997) return 0;
+    const y = klemme(Math.round(v * gh), 0, gh - 1);
+    const x0 = zx(u0), x1 = Math.max(x0 + 1, zx(u1));
+    const n = PH[y * (gw + 1) + Math.min(gw, x1)] - PH[y * (gw + 1) + x0];
+    return (n >= 3 ? 0.6 : 0) + (4 * n) / (x1 - x0);
+  };
+
+  const zPlan = Math.min(kam.z, schmal ? 1.25 : 1.9);
+  const zMin = 1.0;
+  const zMax = schmal ? 1.25 : 1.9;
+  const zStufen = [zPlan];
+  for (let z = zMin; z <= zMax + 1e-6; z += 0.025) zStufen.push(+z.toFixed(3));
+  // Scrollen nach unten wie geplant, nach oben oder (mit kleinem Abzug) stillstehen
+  const scrolls = dyPlan ? [dyPlan, -dyPlan, 0] : [0];
+
+  let best = { s: Infinity, z: zPlan, u: 0, v: 0, dy: dyPlan };
+  for (const z of zStufen) {
+    for (const dy of scrolls) {
+      const g = geometrie(z, dy);
+      const uSchritte = g.uMax > 0.002 ? 48 : 0;
+      const vSpanne = g.vMax - g.vMin;
+      const vSchritte = vSpanne > 0.002 ? Math.min(40, Math.ceil(vSpanne / (g.ch * 0.06))) : 0;
+      const halt = dyPlan && !dy ? 0.25 : 0;
+      for (let i = 0; i <= uSchritte; i++) {
+        const u = uSchritte ? (g.uMax * i) / uSchritte : 0;
+        for (let j = 0; j <= vSchritte; j++) {
+          const v = vSchritte ? g.vMin + (vSpanne * j) / vSchritte : g.vMin;
+          // senkrechte Kanten über die ganze Scrollstrecke prüfen, waagerechte im Ruhebild
+          const va = Math.min(v, v + g.dv);
+          const vb = Math.max(v, v + g.dv) + g.ch;
+          const inh = innen(u, v, u + g.cw, v + g.ch);
+          const leer = Math.max(0, 1 - inh / 0.035);
+          const gleich = meiden
+            ? Math.max(0, ueberlappung({ u, v, cw: g.cw, ch: g.ch }, meiden) - 0.6) / 0.4
+            : 0;
+          const s =
+            schnittU(u, va, vb) +
+            schnittU(u + g.cw, va, vb) +
+            schnittV(v, u, u + g.cw) +
+            schnittV(v + g.ch, u, u + g.cw) +
+            // auch das Ende der Scrollbewegung soll sauber landen
+            (g.dv ? 0.7 * (schnittV(v + g.dv, u, u + g.cw) + schnittV(v + g.dv + g.ch, u, u + g.cw)) : 0) +
+            2 * leer +
+            2 * gleich +
+            halt +
+            (!schmal && z < 1.12 ? 0.5 : 0) +
+            0.3 * (g.uMax ? Math.abs(u - g.pu) / g.uMax : 0) +
+            0.3 * Math.min(1.5, Math.abs(v - g.pv) / g.ch) +
+            0.8 * Math.abs(z - zPlan);
+          if (s < best.s) best = { s, z, u, v, dy };
+        }
+      }
+    }
+  }
+
+  const g = geometrie(best.z, best.dy);
+  let cursor = kam.cursor;
+  if (cursor) {
+    // Zeiger auf das nächste Stück echten Inhalt (Wort, Knopf) im Ausschnitt setzen
+    const zu = best.u + klemme(cursor.x, 0, 1) * g.cw;
+    const zv = best.v + klemme(cursor.y, 0, 1) * g.ch;
+    const bu = 6 / gw;
+    const bv = 2 / gh;
+    let ziel = { s: -Infinity, u: zu, v: zv };
+    for (let a = 0.14; a <= 0.86; a += 0.03) {
+      for (let b = 0.16; b <= 0.84; b += 0.03) {
+        const u = best.u + a * g.cw;
+        const v = best.v + b * g.ch;
+        const dd = innen(u - bu, v - bv, u + bu, v + bv);
+        if (dd < 0.12) continue;
+        const s = Math.min(dd, 0.4) - 1.4 * Math.hypot((u - zu) / g.cw, (v - zv) / g.ch);
+        if (s > ziel.s) ziel = { s, u, v };
+      }
+    }
+    cursor = {
+      ...cursor,
+      x: klemme((ziel.u - best.u) / g.cw, 0.14, 0.86),
+      y: klemme((ziel.v - best.v) / g.ch, 0.16, 0.84),
+    };
+  }
+  return { ...basis(best.z, best.dy), cursor, fest: { u0: best.u, v0: best.v } };
+};
+
+/** v45: alle Screenshot-Takte eines Reels der Reihe nach ausrichten (jeder anders als der vorige). */
+const takteCache = new WeakMap<BildMasse, Map<string, Takt[]>>();
+export const richteTakteAus = (takte: Takt[], masse: BildMasse): Takt[] => {
+  // einmal je Screenshot und Taktplan rechnen, nicht in jedem Bild
+  const schluessel = takte
+    .map((t) => `${t.von}-${t.bis}-${t.inhalt}-${t.kam.z}-${t.kam.x}-${t.kam.y}-${t.loop ? 1 : 0}`)
+    .join('|');
+  let m = takteCache.get(masse);
+  if (!m) {
+    m = new Map();
+    takteCache.set(masse, m);
+  }
+  const vorhanden = m.get(schluessel);
+  if (vorhanden) return vorhanden;
+  const neu = richteTakteAusRoh(takte, masse);
+  m.set(schluessel, neu);
+  return neu;
+};
+
+const richteTakteAusRoh = (takte: Takt[], masse: BildMasse): Takt[] => {
+  const { W, H, Wv, hv, schmal } = shotGeometrie(masse);
+  const fertig = new Map<Kamera, Kamera>();
+  let vorher: Ausschnitt | undefined;
+  return takte.map((t) => {
+    if (t.inhalt !== 'shot') return t;
+    if (t.loop) return { ...t, kam: fertig.get(t.kam) ?? t.kam };
+    const k = ausrichten(t.kam, W, H, Wv, hv, schmal, masse.tinte, vorher);
+    if (!fertig.has(t.kam)) fertig.set(t.kam, k);
+    if (k.fest) {
+      vorher = { u: k.fest.u0, v: k.fest.v0, cw: Math.min(1, Wv / (W * k.z)), ch: Math.min(1, hv / (H * k.z)) };
+    } else {
+      vorher = { u: 0, v: 0, cw: 1, ch: 1 };
+    }
+    return { ...t, kam: k };
+  });
 };
 
 // Deterministic studio SFX cues synced to visual cuts, typing cadence, copy click & share

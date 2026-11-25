@@ -81,7 +81,14 @@ export type Kamera = {
   dy?: number;
   /** Optional cursor target inside the viewport (0..1) */
   cursor?: { x: number; y: number; klick?: boolean };
+  /** v45: fester Bildausschnitt (linke/obere Kante als Anteil des Screenshots), von ausrichten() gesetzt */
+  fest?: { u0: number; v0: number };
 };
+
+/** v45: grobe Karte, wo im Screenshot Schrift/Kanten sind (1 = Kante), zum Ausrichten der Zooms */
+export type Tinte = { gw: number; gh: number; d: Uint8Array };
+
+export type BildMasse = { b: number; h: number; tinte?: Tinte };
 
 export type Oben = {
   art: 'hook' | 'schritt' | 'titel';
