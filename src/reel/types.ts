@@ -70,7 +70,7 @@ export type ReelProps = {
   safeZone?: boolean;
 };
 
-export type Inhalt = 'shot' | 'prompt' | 'liste' | 'teilen';
+export type Inhalt = 'shot' | 'prompt' | 'liste' | 'schritt' | 'teilen';
 
 export type Kamera = {
   z: number;

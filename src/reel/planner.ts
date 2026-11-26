@@ -206,6 +206,9 @@ export const rollen = (p: ReelProps) => {
 export const plane = (p: ReelProps, fps: number, gesamt: number, hatShot: boolean) => {
   const { sz, n, letzte, prompt, pIdx, mitte, nr, gesamtSchritte, schritte, listeTexte } = rollen(p);
   const r = zufall(hash(`${p.tool}|${sz[0].titel}`));
+  // v51: Varianten ohne Screenshot (Startansicht der Schritt-Szenen), unabhängig vom Kamera-Zufall
+  const kartenStart = hash(`${p.tool}|${p.toolUrl}|karten`) % 2;
+  const promptListe = !schritte.length && pIdx > 0 && nr[pIdx] ? nr[pIdx] - 1 : -1;
 
   const von = sz.map((s, i) =>
     i === 0 ? 0 : Math.round(klemme(s.start * fps, 1, gesamt - 2)),
@@ -273,8 +276,25 @@ export const plane = (p: ReelProps, fps: number, gesamt: number, hatShot: boolea
     if (hatShot && !(mitListe && j % 2 === 1)) {
       return { von: a, bis: b, inhalt: 'shot', kam: naechsteShot(), oben: o, szenenIdx, beat: j };
     }
-    if (!hatShot && prompt && j % 2 === 1) {
-      return { von: a, bis: b, inhalt: 'prompt', kam: TOTAL, oben: o, szenenIdx, beat: j };
+    if (!hatShot) {
+      // v51: ohne Screenshot wechselt jeder Takt die Ansicht (ein Schritt groß ↔ ganzer Ablauf),
+      // Startansicht je Reel aus dem Hash, damit zwei Reels nicht gleich aufgebaut sind.
+      const gross = (j + kartenStart) % 2 === 0;
+      if (szenenIdx === 0) {
+        // Hook: Bild 0 zeigt den ganzen Ablauf im Überblick, danach die Schritte einzeln als Vorschau
+        if (j === 0 || listeTexte.length < 2) {
+          return { von: a, bis: b, inhalt: 'liste', kam: j % 2 ? NAH : TOTAL, oben: o, szenenIdx, aktiv: -1, beat: j };
+        }
+        const vorschau = Math.max(0, (prompt ? j - 2 : j - 1) % listeTexte.length);
+        // der Prompt-Schritt hat seine eigene Karte; als Vorschau lieber den ganzen Ablauf zeigen
+        if (vorschau === promptListe) {
+          return { von: a, bis: b, inhalt: 'liste', kam: TOTAL, oben: o, szenenIdx, aktiv: -1, beat: j };
+        }
+        return { von: a, bis: b, inhalt: 'schritt', kam: NAH, oben: o, szenenIdx, aktiv: vorschau, beat: j };
+      }
+      if (gross && aktiv < listeTexte.length) {
+        return { von: a, bis: b, inhalt: 'schritt', kam: NAH, oben: o, szenenIdx, aktiv, beat: j };
+      }
     }
     return {
       von: a,
@@ -739,6 +759,10 @@ const richteTakteAusRoh = (takte: Takt[], masse: BildMasse): Takt[] => {
   });
 };
 
+/** v51: Beginnt mit diesem Takt eine neue Ansicht (eigener Übergang mit Federung)? */
+export const neueAnsicht = (vor: Takt, t: Takt) =>
+  vor.inhalt !== t.inhalt || !!t.loop || (t.inhalt === 'schritt' && vor.aktiv !== t.aktiv);
+
 // Deterministic studio SFX cues synced to visual cuts, typing cadence, copy click & share
 export const planeSfx = (
   takte: Takt[],
@@ -753,9 +777,17 @@ export const planeSfx = (
 
   takte.forEach((t, i) => {
     const vor = i > 0 ? takte[i - 1] : undefined;
-    const neu = i > 0 && (!vor || vor.inhalt !== t.inhalt || t.loop);
+    const neu = i > 0 && (!vor || neueAnsicht(vor, t));
+    // v51: Wechsel zwischen den Karten ohne Screenshot leise wie ein Umblättern, nicht als Whoosh
+    const kartenWechsel =
+      !!vor && !t.loop && /^(liste|schritt)$/.test(vor.inhalt) && /^(liste|schritt)$/.test(t.inhalt);
 
-    if (neu && t.von > 0 && t.von < gesamt - 4) {
+    if (neu && kartenWechsel) {
+      // nur wenn die große Schritt-Karte hereinkommt, zurück zur Liste ohne Geräusch
+      if (t.inhalt === 'schritt' && t.von > 0 && t.von < gesamt - 4) {
+        cues.push({ frame: t.von, art: 'pop', volume: 0.13 });
+      }
+    } else if (neu && t.von > 0 && t.von < gesamt - 4) {
       if (t.inhalt === 'teilen') {
         cues.push({ frame: t.von, art: 'send', volume: 0.22 });
       } else {
