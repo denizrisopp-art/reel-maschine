@@ -23,10 +23,11 @@ import {
   tintenKarte,
   tippKurve,
 } from './reel/planner';
-import { BildMasse, BUEHNE, ReelProps, Szene, Tinte, Wort } from './reel/types';
+import { BildMasse, BUEHNE, OBEN, ReelProps, Szene, Tinte, Wort } from './reel/types';
 import { AudioSpur } from './reel/components/AudioSpur';
 import {
   BrowserRahmen,
+  FokusKarte,
   PromptKarte,
   SchritteListe,
   TeilenSzene,
@@ -97,6 +98,8 @@ export const Reel: React.FC<ReelProps> = (p) => {
   const pf = useMemo(() => promptForm(p.promptText || ''), [p.promptText]);
   const kurve = useMemo(() => tippKurve(pf.text, hash(pf.text)), [pf.text]);
   const { listeTexte } = useMemo(() => rollen(p), [p]);
+  // v51: Ausrichtung der großen Schritt-Karte wechselt je Reel (links oder mittig)
+  const kartenMittig = hash(`${p.tool}|${p.toolUrl}|mittig`) % 2 === 1;
   const sfxCues = useMemo(
     () => planeSfx(takte, pf.text, kurve, fps, durationInFrames),
     [takte, pf.text, kurve, fps, durationInFrames],
@@ -107,11 +110,17 @@ export const Reel: React.FC<ReelProps> = (p) => {
   const takt = takte[ti];
   const vor = ti > 0 ? takte[ti - 1] : undefined;
 
+  // v51: In Schritt-Szenen ohne Screenshot füllt die große Schritt-Karte den Platz der Überschrift
+  const vollKarte = (t: { inhalt: string; szenenIdx: number }) =>
+    t.inhalt === 'schritt' && t.szenenIdx > 0;
+  const istVoll = vollKarte(takt);
+
   // Keep headline anchored while its text & role remain unchanged
   let oi = ti;
   while (
     oi > 0 &&
     !takte[oi].loop &&
+    !vollKarte(takte[oi - 1]) &&
     takte[oi - 1].oben.text === takt.oben.text &&
     takte[oi - 1].oben.art === takt.oben.art
   ) {
@@ -120,7 +129,15 @@ export const Reel: React.FC<ReelProps> = (p) => {
   const obenSeit = oi === 0 ? Infinity : f - takte[oi].von;
 
   // Stage transition & living micro-drift so no beat ever freezes dead
-  const neu = ti > 0 && (!vor || vor.inhalt !== takt.inhalt || takt.loop);
+  // v51: auch ein Wechsel der großen Schritt-Karte auf einen anderen Schritt bekommt einen Übergang
+  const neu =
+    ti > 0 &&
+    (!vor ||
+      vor.inhalt !== takt.inhalt ||
+      !!takt.loop ||
+      (takt.inhalt === 'schritt' && vor.aktiv !== takt.aktiv));
+  const kartenWechsel =
+    neu && !!vor && !takt.loop && /^(liste|schritt)$/.test(vor.inhalt) && /^(liste|schritt)$/.test(takt.inhalt);
   const seit = f - takt.von;
   const taktDauer = Math.max(1, takt.bis - takt.von);
   const driftProgress = klemme(seit / taktDauer, 0, 1);
@@ -193,6 +210,19 @@ export const Reel: React.FC<ReelProps> = (p) => {
         driftScale={driftScale}
       />
     );
+  } else if (takt.inhalt === 'schritt') {
+    inhalt = (
+      <FokusKarte
+        items={listeTexte}
+        aktiv={takt.aktiv ?? 0}
+        tool={p.tool}
+        toolUrl={p.toolUrl}
+        mittig={kartenMittig}
+        seit={seit}
+        driftScale={driftScale}
+        hoehe={istVoll ? BUEHNE.y + BUEHNE.h - OBEN.top - 16 : undefined}
+      />
+    );
   } else if (takt.inhalt === 'teilen') {
     inhalt = <TeilenSzene seit={seit} beat={takt.beat} />;
   }
@@ -212,15 +242,15 @@ export const Reel: React.FC<ReelProps> = (p) => {
 
       <Fortschritt frame={f} gesamt={durationInFrames} szenenGrenzen={szenenGrenzen} />
 
-      <ObenText o={takt.oben} tool={p.tool} toolUrl={p.toolUrl} seit={obenSeit} />
+      {!istVoll && <ObenText o={takt.oben} tool={p.tool} toolUrl={p.toolUrl} seit={obenSeit} />}
 
       <div
         style={{
           position: 'absolute',
           left: BUEHNE.x,
-          top: BUEHNE.y,
+          top: istVoll ? OBEN.top + 8 : BUEHNE.y,
           width: BUEHNE.b,
-          height: BUEHNE.h,
+          height: istVoll ? BUEHNE.y + BUEHNE.h - OBEN.top - 8 : BUEHNE.h,
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
@@ -229,7 +259,8 @@ export const Reel: React.FC<ReelProps> = (p) => {
         <div
           style={{
             transform: `translateY(${(1 - rein) * 48}px) scale(${0.968 + 0.032 * rein})`,
-            opacity: klemme(rein * 1.75, 0, 1),
+            // v51: Kartenwechsel ohne Screenshot blenden nicht über eine leere Bühne
+            opacity: kartenWechsel ? klemme(0.45 + rein * 1.2, 0, 1) : klemme(rein * 1.75, 0, 1),
           }}
         >
           {inhalt}
