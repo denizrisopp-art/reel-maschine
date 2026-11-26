@@ -450,11 +450,15 @@ export const SchritteListe: React.FC<SchritteListeProps> = ({
   markiert,
   driftScale,
 }) => {
+  // v51: aktiv -1 = Überblick (kein Schritt hervorgehoben); die Karte füllt die Bühne in der Höhe
+  const ueberblick = aktiv < 0;
   const safeAktiv = klemme(aktiv, 0, Math.max(0, items.length - 1));
+  const schrift = items.length <= 2 ? 56 : items.length === 3 ? 48 : items.length === 4 ? 42 : 38;
   return (
     <div
       style={{
         width: BUEHNE.b,
+        height: BUEHNE.h - 16,
         boxSizing: 'border-box',
         borderRadius: 24,
         background: C.panel,
@@ -483,15 +487,27 @@ export const SchritteListe: React.FC<SchritteListeProps> = ({
           fontVariantNumeric: 'tabular-nums',
         }}
       >
-        <span style={{ color: C.muted }}>ABLAUF</span>
+        <span style={{ color: C.muted }}>{ueberblick ? "SO GEHT'S" : 'ABLAUF'}</span>
         <span style={{ color: C.leise }}>
-          {String(safeAktiv + 1).padStart(2, '0')} / {String(items.length).padStart(2, '0')}
+          {ueberblick
+            ? `${String(items.length).padStart(2, '0')} ${items.length === 1 ? 'SCHRITT' : 'SCHRITTE'}`
+            : `${String(safeAktiv + 1).padStart(2, '0')} / ${String(items.length).padStart(2, '0')}`}
         </span>
       </div>
 
+      <div
+        style={{
+          flex: 1,
+          minHeight: 0,
+          display: 'flex',
+          flexDirection: 'column',
+          justifyContent: 'space-evenly',
+          gap: 12,
+        }}
+      >
       {items.map((t, i) => {
-        const istAktiv = i === safeAktiv;
-        const erledigt = i < safeAktiv;
+        const istAktiv = !ueberblick && i === safeAktiv;
+        const erledigt = !ueberblick && i < safeAktiv;
         const fokus = istAktiv ? Math.max(0.6, markiert) : 0;
 
         return (
@@ -500,23 +516,23 @@ export const SchritteListe: React.FC<SchritteListeProps> = ({
             style={{
               position: 'relative',
               display: 'flex',
-              gap: 20,
+              gap: 24,
               alignItems: 'center',
-              padding: '18px 20px',
+              padding: items.length <= 3 ? '24px 24px' : '16px 22px',
               borderRadius: 16,
               background: istAktiv ? C.panelElevated : 'transparent',
               border: istAktiv
                 ? `1.5px solid rgba(255,255,255,${(0.14 + 0.14 * fokus).toFixed(2)})`
                 : '1.5px solid transparent',
               boxShadow: istAktiv ? 'inset 0 1px 0 rgba(255,255,255,0.08)' : 'none',
-              opacity: istAktiv ? 1 : erledigt ? 0.68 : 0.36,
+              opacity: ueberblick || istAktiv ? 1 : erledigt ? 0.68 : 0.36,
               transform: istAktiv ? `scale(${1 + 0.012 * fokus})` : 'scale(1)',
             }}
           >
             <Nummer n={i + 1} erledigt={erledigt} aktiv={istAktiv} />
             <div
               style={{
-                fontSize: items.length > 3 ? 38 : 44,
+                fontSize: schrift,
                 fontWeight: istAktiv ? 700 : 600,
                 lineHeight: 1.18,
                 letterSpacing: -0.6,
@@ -528,6 +544,149 @@ export const SchritteListe: React.FC<SchritteListeProps> = ({
           </div>
         );
       })}
+      </div>
+    </div>
+  );
+};
+
+type FokusKarteProps = {
+  items: string[];
+  aktiv: number;
+  tool: string;
+  toolUrl: string;
+  mittig: boolean;
+  seit: number;
+  driftScale: number;
+  /** v51: volle Höhe (Schritt-Szenen ohne Überschrift darüber) */
+  hoehe?: number;
+};
+
+/**
+ * v51: ohne Screenshot ein Schritt groß und allein (Nummer, Text, Fortschritt), füllt die Bühne.
+ * Nur Texte aus szenen/schritte, nichts Erfundenes. Nummer und Text kommen leicht versetzt
+ * mit Federung herein, wie von Hand gesetzt.
+ */
+export const FokusKarte: React.FC<FokusKarteProps> = ({
+  items,
+  aktiv,
+  tool,
+  toolUrl,
+  mittig,
+  seit,
+  driftScale,
+  hoehe = BUEHNE.h - 16,
+}) => {
+  const { fps } = useVideoConfig();
+  const i = klemme(aktiv, 0, Math.max(0, items.length - 1));
+  const text = items[i] || '';
+  const L = text.length;
+  const voll = hoehe > BUEHNE.h + 100;
+  const fs = voll
+    ? L <= 22 ? 90 : L <= 36 ? 80 : L <= 52 ? 70 : 60
+    : L <= 22 ? 76 : L <= 36 ? 68 : L <= 52 ? 60 : 52;
+  const feder = (verzug: number) =>
+    spring({
+      frame: Math.max(0, seit - Math.round(verzug * fps)),
+      fps,
+      config: { damping: 18, stiffness: 150, mass: 0.8 },
+    });
+  const nummerRein = feder(0.02);
+  const textRein = feder(0.07);
+  const ausrichtung = mittig ? 'center' : 'flex-start';
+  return (
+    <div
+      style={{
+        width: BUEHNE.b,
+        height: hoehe,
+        boxSizing: 'border-box',
+        borderRadius: 24,
+        background: C.panel,
+        border: `1px solid ${C.lineStrong}`,
+        boxShadow: '0 28px 72px rgba(0,0,0,0.56), inset 0 1px 0 rgba(255,255,255,0.10)',
+        padding: voll ? '36px 48px 48px' : '32px 44px 40px',
+        display: 'flex',
+        flexDirection: 'column',
+        transform: `scale(${driftScale})`,
+      }}
+    >
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          paddingBottom: 16,
+          borderBottom: `1px solid ${C.line}`,
+          fontFamily: monoFontFamily,
+          fontSize: 22,
+          fontWeight: 600,
+          letterSpacing: 1.2,
+          fontVariantNumeric: 'tabular-nums',
+        }}
+      >
+        <span style={{ color: C.muted }}>
+          SCHRITT {String(i + 1).padStart(2, '0')} / {String(items.length).padStart(2, '0')}
+        </span>
+        <span style={{ color: C.leise, letterSpacing: 0.2 }}>{cleanDomain(toolUrl)}</span>
+      </div>
+
+      <div
+        style={{
+          flex: 1,
+          display: 'flex',
+          flexDirection: 'column',
+          justifyContent: 'center',
+          alignItems: ausrichtung,
+          textAlign: mittig ? 'center' : 'left',
+          gap: voll ? 40 : 26,
+        }}
+      >
+        <div
+          style={{
+            fontFamily: monoFontFamily,
+            fontWeight: 700,
+            fontSize: voll ? 250 : 168,
+            lineHeight: 0.9,
+            letterSpacing: -6,
+            color: C.ink,
+            fontVariantNumeric: 'tabular-nums',
+            opacity: klemme(0.4 + nummerRein * 1.2, 0, 1),
+            transform: `translateY(${(1 - nummerRein) * 26}px)`,
+          }}
+        >
+          {String(i + 1).padStart(2, '0')}
+        </div>
+        <div
+          style={{
+            fontWeight: 800,
+            fontSize: fs,
+            lineHeight: 1.08,
+            letterSpacing: -1.6,
+            wordSpacing: '0.14em',
+            textWrap: 'balance',
+            color: C.ink,
+            maxWidth: BUEHNE.b - 88,
+            opacity: klemme(0.3 + textRein * 1.3, 0, 1),
+            transform: `translateY(${(1 - textRein) * 22}px)`,
+          }}
+        >
+          <Gefaerbt text={text} tool={tool} />
+        </div>
+      </div>
+
+      <div style={{ display: 'flex', gap: 10 }}>
+        {items.map((_, k) => (
+          <div
+            key={k}
+            style={{
+              flex: 1,
+              height: 8,
+              borderRadius: 4,
+              background:
+                k < i ? 'rgba(247,247,248,0.55)' : k === i ? C.ink : 'rgba(255,255,255,0.12)',
+            }}
+          />
+        ))}
+      </div>
     </div>
   );
 };
