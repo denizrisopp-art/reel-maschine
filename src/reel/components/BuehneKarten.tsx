@@ -1,8 +1,8 @@
 import React from 'react';
-import { Img, spring, useCurrentFrame, useVideoConfig } from 'remotion';
+import { Freeze, Img, OffthreadVideo, spring, useCurrentFrame, useVideoConfig } from 'remotion';
 import { monoFontFamily } from '../../fonts';
-import { cleanDomain, kameraPx, klemme, lerp, shotGeometrie } from '../planner';
-import { BAR, BildMasse, BUEHNE, C, Kamera } from '../types';
+import { cleanDomain, cursorBei, glatterCursor, kameraPx, klemme, lerp, shotGeometrie } from '../planner';
+import { Aufnahme, BAR, BildMasse, BUEHNE, C, Kamera } from '../types';
 import { Gefaerbt, Nummer } from './ObenText';
 
 /** Authentic macOS-inspired crisp vector pointer with subtle drop shadow */
@@ -221,6 +221,115 @@ export const BrowserRahmen: React.FC<BrowserRahmenProps> = ({
             <KlickRing x={cx} y={cy} progress={clickProgress} />
             <Zeiger x={cx} y={cy} opacity={klemme(cursorGlide * 2.2, 0, 1)} press={press} />
           </>
+        )}
+      </div>
+    </div>
+  );
+};
+
+type AufnahmeRahmenProps = {
+  aufn: Aufnahme;
+  src: string;
+  toolUrl: string;
+  kam: Kamera;
+  vorKam?: Kamera;
+  fahrt: number;
+  driftProgress: number;
+  seit: number;
+  /** Aufnahmezeit (s) am Anfang dieses Takts */
+  t0: number;
+};
+
+/**
+ * v31: Echte Bildschirmaufnahme der offiziellen Website im Browserfenster. Die Aufnahme läuft in
+ * echter Zeit, der Zeiger folgt dem aufgezeichneten Mausweg; in Nah-Takten zieht die Kamera dem
+ * Zeiger weich hinterher. Nach dem Ende der Aufnahme bleibt ihr letztes Bild stehen.
+ */
+export const AufnahmeRahmen: React.FC<AufnahmeRahmenProps> = ({
+  aufn,
+  src,
+  toolUrl,
+  kam,
+  vorKam,
+  fahrt,
+  driftProgress,
+  seit,
+  t0,
+}) => {
+  const { fps } = useVideoConfig();
+  const Wv = BUEHNE.b - 2;
+  const W = Wv;
+  const H = (W * aufn.hoehe) / Math.max(1, aufn.breite);
+  const hv = Math.min(BUEHNE.h - BAR - 2, H);
+  const letzte = Math.max(0, Math.floor(aufn.dauer * fps) - 1);
+  const lokal = Math.min(letzte, Math.max(0, Math.round(t0 * fps) + seit));
+  const tRec = lokal / fps;
+  // Nah-Takte: senkrecht folgt die Kamera dem Zeiger, waagerecht liegt der Ausschnitt an der linken
+  // oder rechten Seitenkante (wie v45: Website-Text beginnt fast immer links), Wechsel weich
+  const mitMaus = (k: Kamera): Kamera => {
+    if (!k.folgen) return k;
+    const g = glatterCursor(aufn.cursor, tRec);
+    const halb = Wv / (2 * W * k.z);
+    // links bleiben, solange der Zeiger mit etwas Rand in den linken Ausschnitt passt
+    const breite = 1 / k.z;
+    const s = klemme((g.x - (breite - 0.12)) / 0.12, 0, 1);
+    const weich = s * s * (3 - 2 * s);
+    return { ...k, x: lerp(halb, 1 - halb, weich), y: g.y };
+  };
+  const ziel = kameraPx(mitMaus(kam), W, H, Wv, hv, driftProgress);
+  const alt = vorKam && fahrt < 1 ? kameraPx(mitMaus(vorKam), W, H, Wv, hv, 1) : ziel;
+  const c = {
+    z: lerp(alt.z, ziel.z, fahrt),
+    tx: lerp(alt.tx, ziel.tx, fahrt),
+    ty: lerp(alt.ty, ziel.ty, fahrt),
+  };
+  const m = cursorBei(aufn.cursor, tRec);
+  const cx = m ? c.tx + m.x * W * c.z : 0;
+  const cy = m ? c.ty + m.y * H * c.z : 0;
+
+  return (
+    <div
+      style={{
+        position: 'relative',
+        width: BUEHNE.b,
+        height: hv + BAR + 2,
+        boxSizing: 'border-box',
+        borderRadius: 24,
+        overflow: 'hidden',
+        background: C.panel,
+        border: `1px solid ${C.lineStrong}`,
+        boxShadow: '0 28px 72px rgba(0,0,0,0.58), inset 0 1px 0 rgba(255,255,255,0.12)',
+      }}
+    >
+      <Adressleiste url={cleanDomain(toolUrl)} />
+      <div
+        style={{
+          position: 'absolute',
+          top: BAR,
+          left: 0,
+          width: Wv,
+          height: hv,
+          overflow: 'hidden',
+          background: '#FFFFFF',
+        }}
+      >
+        <div
+          style={{
+            position: 'absolute',
+            left: 0,
+            top: 0,
+            width: W,
+            height: H,
+            transformOrigin: '0 0',
+            transform: `translate(${c.tx}px, ${c.ty}px) scale(${c.z})`,
+          }}
+        >
+          <Freeze frame={lokal}>
+            <OffthreadVideo src={src} muted style={{ position: 'absolute', left: 0, top: 0, width: W, height: H }} />
+          </Freeze>
+        </div>
+        {m && cx > -20 && cy > -20 && cx < Wv + 20 && cy < hv + 20 && (
+          <Zeiger x={cx - 5} y={cy - 4} opacity={1} press={0} />
         )}
       </div>
     </div>
