@@ -1,4 +1,4 @@
-// Baut ein Reel aus den Daten von n8n: Assets -> Stimme (ElevenLabs) -> Timing -> Remotion 30fps -> MP4
+// Baut ein Reel aus den Daten von n8n: Assets -> Stimme (ElevenLabs) -> Timing -> Bildschirmaufnahme (v31) -> Remotion 30fps -> MP4
 import fs from 'node:fs';
 import path from 'node:path';
 import { bundle } from '@remotion/bundler';
@@ -92,6 +92,26 @@ if (daten.screenshotUrl) {
   }
 }
 
+// 2b) v31: echte Bildschirmaufnahme der offiziellen Website (optional, sonst bleibt alles wie bisher)
+let aufnahme;
+if (daten.toolUrl && process.env.AUFNAHME !== 'aus') {
+  try {
+    const { aufnehmen } = await import('./aufnahme.mjs');
+    const begriffe = [
+      ...daten.szenen.map((s) => s.titel),
+      ...(Array.isArray(daten.schritte) ? daten.schritte : []),
+    ];
+    aufnahme = (await aufnehmen({ url: daten.toolUrl, woerter: begriffe, ziel: pub })) || undefined;
+  } catch (e) {
+    console.log('Bildschirmaufnahme übersprungen:', e.message);
+  }
+}
+// Kein Screenshot von n8n (z. B. Microlink-Kontingent leer): Standbild aus der Aufnahme nehmen
+if (!screenshot && aufnahme?.bild) {
+  screenshot = aufnahme.bild;
+  console.log('Screenshot aus der Bildschirmaufnahme übernommen');
+}
+
 // Schritte im Wortlaut der Website & optionale Fokus-Koordinaten (aus n8n)
 const schritte = Array.isArray(daten.schritte)
   ? daten.schritte.map((s) => String(s).trim()).filter(Boolean).slice(0, 5)
@@ -105,6 +125,7 @@ const props = {
   schritte,
   fokus,
   screenshot,
+  aufnahme,
   audio: 'stimme.mp3',
   szenen,
   woerter,
