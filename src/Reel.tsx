@@ -12,6 +12,7 @@ import {
 import { fontFamily } from './fonts';
 import {
   gruppiere,
+  gueltigeAufnahme,
   hash,
   klemme,
   plane,
@@ -22,10 +23,12 @@ import {
   rollen,
   tintenKarte,
   tippKurve,
+  verteileAufnahme,
 } from './reel/planner';
 import { BildMasse, BUEHNE, OBEN, ReelProps, Szene, Tinte, Wort } from './reel/types';
 import { AudioSpur } from './reel/components/AudioSpur';
 import {
+  AufnahmeRahmen,
   BrowserRahmen,
   FokusKarte,
   PromptKarte,
@@ -84,10 +87,18 @@ export const Reel: React.FC<ReelProps> = (p) => {
   const { fps, durationInFrames } = useVideoConfig();
   const shot = quelle(p.screenshot);
   const masse = useBildMasse(shot);
+  // v31: echte Bildschirmaufnahme der Website (falls render.mjs sie aufnehmen konnte)
+  const aufn = gueltigeAufnahme(p.aufnahme);
+  const aufnSrc = aufn ? quelle(aufn.datei) : undefined;
 
-  const { takte: rohTakte, szenenGrenzen } = useMemo(
-    () => plane(p, fps, durationInFrames, !!masse),
-    [p, fps, durationInFrames, masse],
+  const { takte: planTakte, szenenGrenzen } = useMemo(
+    () => plane(p, fps, durationInFrames, !!masse || !!aufn),
+    [p, fps, durationInFrames, masse, aufn],
+  );
+  // v31: Website-Takte zeigen zuerst die laufende Aufnahme, danach den Screenshot
+  const rohTakte = useMemo(
+    () => verteileAufnahme(planTakte, aufn, fps, !!masse, hash(`${p.tool}|${p.toolUrl}|aufnahme`)),
+    [planTakte, aufn, fps, masse, p.tool, p.toolUrl],
   );
   // v45: Zoom-Ausschnitte an Text- und Seitenkanten ausrichten statt mitten durch Wörter
   const takte = useMemo(
@@ -135,7 +146,8 @@ export const Reel: React.FC<ReelProps> = (p) => {
     (!vor ||
       vor.inhalt !== takt.inhalt ||
       !!takt.loop ||
-      (takt.inhalt === 'schritt' && vor.aktiv !== takt.aktiv));
+      (takt.inhalt === 'schritt' && vor.aktiv !== takt.aktiv) ||
+      (takt.inhalt === 'shot' && !!vor.clip !== !!takt.clip));
   const kartenWechsel =
     neu && !!vor && !takt.loop && /^(liste|schritt)$/.test(vor.inhalt) && /^(liste|schritt)$/.test(takt.inhalt);
   const seit = f - takt.von;
@@ -159,7 +171,21 @@ export const Reel: React.FC<ReelProps> = (p) => {
       : spring({ frame: seit, fps, config: { damping: 24, stiffness: 78, mass: 1 } });
 
   let inhalt: React.ReactNode = null;
-  if (takt.inhalt === 'shot' && shot && masse) {
+  if (takt.inhalt === 'shot' && takt.clip && aufn && aufnSrc) {
+    inhalt = (
+      <AufnahmeRahmen
+        aufn={aufn}
+        src={aufnSrc}
+        toolUrl={p.toolUrl}
+        kam={takt.kam}
+        vorKam={vor?.clip ? vor.kam : undefined}
+        fahrt={fahrt}
+        driftProgress={driftProgress}
+        seit={seit}
+        t0={takt.clip.t0}
+      />
+    );
+  } else if (takt.inhalt === 'shot' && shot && masse) {
     inhalt = (
       <BrowserRahmen
         shot={shot}
