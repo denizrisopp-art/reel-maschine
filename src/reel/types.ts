@@ -53,10 +53,24 @@ export type FokusPunkt = {
   z?: number;
 };
 
+/** v31: echte Bildschirmaufnahme der offiziellen Website (scripts/aufnahme.mjs) */
+export type CursorPunkt = { t: number; x: number; y: number };
+
+export type Aufnahme = {
+  datei: string;
+  breite: number;
+  hoehe: number;
+  dauer: number;
+  /** Mausweg (Zeit in s, Lage als Anteil des Bildes), die Vorlage zeichnet den Zeiger nach */
+  cursor?: CursorPunkt[];
+  bild?: string;
+};
+
 export type ReelProps = {
   tool: string;
   toolUrl: string;
   screenshot?: string;
+  aufnahme?: Aufnahme;
   ergebnisBild?: string;
   audio?: string;
   promptText?: string;
@@ -83,6 +97,8 @@ export type Kamera = {
   cursor?: { x: number; y: number; klick?: boolean };
   /** v45: fester Bildausschnitt (linke/obere Kante als Anteil des Screenshots), von ausrichten() gesetzt */
   fest?: { u0: number; v0: number };
+  /** v31: Kamera folgt in der Bildschirmaufnahme weich dem Mauszeiger */
+  folgen?: boolean;
 };
 
 /** v45: grobe Karte, wo im Screenshot Schrift/Kanten sind (1 = Kante), zum Ausrichten der Zooms */
@@ -110,6 +126,8 @@ export type Takt = {
   aktiv?: number;
   beat: number;
   loop?: boolean;
+  /** v31: dieser Takt zeigt die Bildschirmaufnahme ab Sekunde t0 */
+  clip?: { t0: number };
 };
 
 export type WortEintrag = {

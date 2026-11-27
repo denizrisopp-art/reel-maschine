@@ -4,6 +4,7 @@ import beispiel from '../beispiel.json';
 import {
   aktivesWortIndex,
   cleanDomain,
+  cursorBei,
   gruppiere,
   kameraPx,
   musikLautstaerke,
@@ -13,6 +14,7 @@ import {
   reelDuration,
   tippKurve,
   toolMarken,
+  verteileAufnahme,
 } from './planner';
 import { REEL_FPS, ReelProps } from './types';
 
@@ -115,4 +117,32 @@ test('musikLautstaerke ducks during speech and fades cleanly at edges', () => {
   assert.equal(endVol, 0);
   assert.ok(speakingVol < 0.08 * 0.7);
   assert.ok(gapVol > 0);
+});
+
+test('verteileAufnahme (v31): Aufnahme läuft in den Website-Takten weiter, danach Screenshot', () => {
+  const gesamt = reelDuration(sample, REEL_FPS);
+  const { takte } = plane(sample, REEL_FPS, gesamt, true);
+  const aufn = { datei: 'aufnahme.mp4', breite: 1120, hoehe: 780, dauer: 4, cursor: [] };
+  const neu = verteileAufnahme(takte, aufn, REEL_FPS, true, 7);
+  const clips = neu.filter((t) => t.clip && !t.loop);
+  assert.ok(clips.length >= 2, 'mindestens zwei Takte mit Aufnahme');
+  let erwartet = 0;
+  for (const t of clips) {
+    assert.ok(Math.abs(t.clip!.t0 - erwartet) < 0.01, 'Aufnahme läuft ohne Sprung weiter');
+    erwartet += (t.bis - t.von) / REEL_FPS;
+  }
+  assert.ok(clips[0].kam.z === 1, 'erster Aufnahme-Takt zeigt das ganze Fenster');
+  assert.ok(clips.some((t) => t.kam.folgen), 'Nah-Takte folgen dem Zeiger');
+  assert.ok(neu.some((t) => t.inhalt === 'shot' && !t.clip), 'nach der Aufnahme kommt wieder der Screenshot');
+  assert.equal(verteileAufnahme(takte, undefined, REEL_FPS, true, 7), takte, 'ohne Aufnahme unverändert');
+});
+
+test('cursorBei (v31) rechnet zwischen gespeicherten Mauspunkten', () => {
+  const c = [
+    { t: 0, x: 0.2, y: 0.2 },
+    { t: 1, x: 0.6, y: 0.4 },
+  ];
+  assert.deepEqual(cursorBei(c, 0.5), { x: 0.4, y: 0.30000000000000004 });
+  assert.deepEqual(cursorBei(c, 5), { x: 0.6, y: 0.4 });
+  assert.equal(cursorBei([], 1), null);
 });

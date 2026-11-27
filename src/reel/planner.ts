@@ -1,4 +1,6 @@
 import {
+  Aufnahme,
+  CursorPunkt,
   Gruppe,
   Kamera,
   Oben,
@@ -727,7 +729,7 @@ const takteCache = new WeakMap<BildMasse, Map<string, Takt[]>>();
 export const richteTakteAus = (takte: Takt[], masse: BildMasse): Takt[] => {
   // einmal je Screenshot und Taktplan rechnen, nicht in jedem Bild
   const schluessel = takte
-    .map((t) => `${t.von}-${t.bis}-${t.inhalt}-${t.kam.z}-${t.kam.x}-${t.kam.y}-${t.loop ? 1 : 0}`)
+    .map((t) => `${t.von}-${t.bis}-${t.inhalt}-${t.kam.z}-${t.kam.x}-${t.kam.y}-${t.loop ? 1 : 0}-${t.clip ? t.clip.t0 : ''}`)
     .join('|');
   let m = takteCache.get(masse);
   if (!m) {
@@ -746,7 +748,8 @@ const richteTakteAusRoh = (takte: Takt[], masse: BildMasse): Takt[] => {
   const fertig = new Map<Kamera, Kamera>();
   let vorher: Ausschnitt | undefined;
   return takte.map((t) => {
-    if (t.inhalt !== 'shot') return t;
+    // v31: Takte mit Bildschirmaufnahme haben ihre eigene Kamera (folgt dem Mauszeiger)
+    if (t.inhalt !== 'shot' || t.clip) return t;
     if (t.loop) return { ...t, kam: fertig.get(t.kam) ?? t.kam };
     const k = ausrichten(t.kam, W, H, Wv, hv, schmal, masse.tinte, vorher);
     if (!fertig.has(t.kam)) fertig.set(t.kam, k);
@@ -761,7 +764,84 @@ const richteTakteAusRoh = (takte: Takt[], masse: BildMasse): Takt[] => {
 
 /** v51: Beginnt mit diesem Takt eine neue Ansicht (eigener Übergang mit Federung)? */
 export const neueAnsicht = (vor: Takt, t: Takt) =>
-  vor.inhalt !== t.inhalt || !!t.loop || (t.inhalt === 'schritt' && vor.aktiv !== t.aktiv);
+  vor.inhalt !== t.inhalt ||
+  !!t.loop ||
+  (t.inhalt === 'schritt' && vor.aktiv !== t.aktiv) ||
+  // v31: Wechsel zwischen Bildschirmaufnahme und Standbild ist ein eigener Schnitt
+  (t.inhalt === 'shot' && !!vor.clip !== !!t.clip);
+
+// ---------- v31: Bildschirmaufnahme der offiziellen Website ----------
+
+/** Mausposition (Anteil des Bildes) zur Aufnahmezeit t, linear zwischen den gespeicherten Punkten */
+export const cursorBei = (c: CursorPunkt[] | undefined, t: number): { x: number; y: number } | null => {
+  if (!c || !c.length) return null;
+  if (t <= c[0].t) return { x: c[0].x, y: c[0].y };
+  for (let i = 1; i < c.length; i++) {
+    if (t <= c[i].t) {
+      const a = c[i - 1];
+      const b = c[i];
+      const q = (t - a.t) / Math.max(0.001, b.t - a.t);
+      return { x: lerp(a.x, b.x, q), y: lerp(a.y, b.y, q) };
+    }
+  }
+  const z = c[c.length - 1];
+  return { x: z.x, y: z.y };
+};
+
+/** Kamera-Ziel, das dem Zeiger mit leichter Verzögerung folgt (wie ein Mensch, der nachzieht) */
+export const glatterCursor = (c: CursorPunkt[] | undefined, t: number) => {
+  let sx = 0;
+  let sy = 0;
+  let sw = 0;
+  for (let d = 0; d <= 0.75 + 1e-6; d += 0.05) {
+    const m = cursorBei(c, Math.max(0, t - d));
+    if (!m) return { x: 0.5, y: 0.42 };
+    const w = 1 - d / 0.8;
+    sx += m.x * w;
+    sy += m.y * w;
+    sw += w;
+  }
+  return { x: sx / sw, y: sy / sw };
+};
+
+export const gueltigeAufnahme = (a?: Aufnahme): Aufnahme | undefined =>
+  a && a.datei && a.breite > 0 && a.hoehe > 0 && a.dauer >= 1.5 ? a : undefined;
+
+/**
+ * v31: Die Bildschirmaufnahme läuft in den Website-Takten der Reihe nach weiter (echte Zeit),
+ * abwechselnd als Totale (ganzes Fenster) und nah am Mauszeiger. Ist sie zu Ende, zeigen die
+ * übrigen Website-Takte wie bisher den Screenshot mit ausgerichteten Zooms; ohne Screenshot
+ * bleibt das letzte Bild der Aufnahme stehen (die Kamera bewegt sich weiter).
+ */
+export const verteileAufnahme = (
+  takte: Takt[],
+  aufn: Aufnahme | undefined,
+  fps: number,
+  mitBild: boolean,
+  seed: number,
+): Takt[] => {
+  if (!aufn) return takte;
+  const r = zufall(seed);
+  // Variante je Reel: wie nah die Kamera an den Mauszeiger rangeht
+  const zNah = 1.68 + r() * 0.26;
+  const totale: Kamera = { z: 1, x: 0.5, y: 0.5, dz: 0.022, dy: 0 };
+  const nah: Kamera = { z: +zNah.toFixed(3), x: 0.5, y: 0.5, dz: 0.035, dy: 0, folgen: true };
+  const out = takte.map((t) => ({ ...t }));
+  let zeit = 0;
+  let k = 0;
+  for (const t of out) {
+    if (t.inhalt !== 'shot' || t.loop) continue;
+    const laenge = (t.bis - t.von) / fps;
+    const rest = aufn.dauer - zeit;
+    if (mitBild && rest < Math.min(0.9, laenge * 0.6)) break;
+    t.clip = { t0: +Math.min(zeit, aufn.dauer).toFixed(3) };
+    t.kam = k % 2 === 0 ? totale : nah;
+    zeit += laenge;
+    k++;
+  }
+  const erster = out[0];
+  return out.map((t) => (t.loop && erster && erster.clip ? { ...t, clip: { t0: 0 }, kam: erster.kam } : t));
+};
 
 // Deterministic studio SFX cues synced to visual cuts, typing cadence, copy click & share
 export const planeSfx = (
