@@ -107,16 +107,26 @@ export async function aufnehmen({ url, woerter = [], ziel, limitMs = 40000 }) {
             const r = el.getBoundingClientRect();
             if (r.width * r.height > 0.22 * innerWidth * innerHeight) dialog += ' ' + (el.innerText || '').slice(0, 400);
           }
-          return { text: document.body?.innerText || '', pw, dialog };
+          // sichtbare Bausteine im ersten Bildschirm (Chat-Oberflächen haben wenig Text, aber viele Elemente)
+          let elemente = 0;
+          for (const el of document.querySelectorAll('body *')) {
+            const r = el.getBoundingClientRect();
+            if (r.width < 8 || r.height < 8 || r.bottom < 0 || r.top > innerHeight || r.right < 0 || r.left > innerWidth) continue;
+            if (sichtbar(el)) elemente++;
+            if (elemente > 400) break;
+          }
+          return { text: document.body?.innerText || '', pw, dialog, elemente };
         })
-        .catch(() => ({ text: '', pw: false, dialog: '' }));
+        .catch(() => ({ text: '', pw: false, dialog: '', elemente: 0 }));
       if (wurzel(host) !== wurzel(sollHost)) return `fremde Domain ${host}`;
       if (LOGIN_PFAD.test(new URL(page.url()).pathname)) return 'Login-Seite';
       if (info.pw) return 'Passwortfeld sichtbar';
       if (info.dialog && LOGIN_WORT.test(info.dialog)) return 'Login-Fenster';
       if (info.dialog) return 'Fenster über der Seite';
       if (SPERRE.test(info.text.slice(0, 3000))) return 'Prüfseite';
-      if (info.text.trim().length < 150) return `zu wenig Text (${info.text.trim().length})`;
+      const zeichen = info.text.trim().length;
+      if (zeichen < 30 || (zeichen < 150 && info.elemente < 10))
+        return `leere Seite (${zeichen} Zeichen, ${info.elemente} Elemente)`;
       return '';
     };
     let grund = await pruefe();
