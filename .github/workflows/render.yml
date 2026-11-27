@@ -23,6 +23,10 @@ jobs:
       - run: npm ci
       - name: Schriften bereitstellen
         run: mkdir -p public/fonts && cp node_modules/@fontsource/inter/files/inter-latin-{500,600,700,800,900}-normal.woff2 node_modules/@fontsource/inter/files/inter-latin-ext-{500,600,700,800,900}-normal.woff2 public/fonts/
+      - name: Browser für die Bildschirmaufnahme (v31, optional, nutzt das vorinstallierte Chrome)
+        continue-on-error: true
+        timeout-minutes: 3
+        run: npm install --no-save --no-audit --no-fund playwright-core@1.63.0
       - name: Reel bauen
         env:
           DATEN: ${{ inputs.daten }}
